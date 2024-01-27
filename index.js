@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 
-const port = 8000;
+const port = 3000;
 
 const cors = require('cors');
 
