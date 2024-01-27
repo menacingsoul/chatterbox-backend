@@ -7,7 +7,7 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 
-const port = 3000;
+const PORT = 3000;
 
 const cors = require('cors');
 
@@ -18,16 +18,22 @@ app.use(passport.initialize());
 
 const jwt = require('jsonwebtoken');
 
-mongoose.connect(
-    'mongodb+srv://adarsh14304:adarsh@cluster0.s8vo8qg.mongodb.net/?retryWrites=true&w=majority',
-    { useNewUrlParser: true ,
-    useUnifiedTopology: true }
-).then(() => console.log('MongoDB Connected'))
-.catch((err) => {console.log("Error in mnogoDB connection",err)});
 
-app.listen(port, () => {
-    console.log(`Server is running on port: ${port}`);
-});
+mongoose
+  .connect('mongodb+srv://adarsh14304:adarsh@cluster0.s8vo8qg.mongodb.net/?retryWrites=true&w=majority', {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => {
+    console.log("MongoDB connected");
+    // Start the server after MongoDB connection is established
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  })
+  .catch((err) => {
+    console.error("MongoDB connection error:", err);
+  });
 
 const User = require("./models/user");
 const Message = require("./models/message");
