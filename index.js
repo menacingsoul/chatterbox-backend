@@ -27,7 +27,7 @@ mongoose
   .then(() => {
     console.log("MongoDB connected");
     // Start the server after MongoDB connection is established
-    app.listen(PORT, () => {
+    app.listen(PORT,"0.0.0.0", () => {
       console.log(`Server is running on port ${PORT}`);
     });
   })
