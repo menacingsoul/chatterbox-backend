@@ -1,45 +1,67 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const http = require('http');
+const socketIo = require('socket.io');
 const passport = require('passport');
 const LocalStrategy = require('passport-local');
 const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const path = require('path');  // Add this line to work with file paths
 
 const app = express();
-
 const PORT = 3000;
-
 const cors = require('cors');
+
+const server = http.createServer(app);
+const io = socketIo(server);
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(passport.initialize());
+app.use('/files', express.static(path.join(__dirname, 'files'))); // Serve uploaded files
 
 const jwt = require('jsonwebtoken');
 
-
 mongoose
-  .connect('mongodb+srv://adarsh14304:adarsh@cluster0.s8vo8qg.mongodb.net/?retryWrites=true&w=majority', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(() => {
-    console.log("MongoDB connected");
-    // Start the server after MongoDB connection is established
-    app.listen(PORT,"0.0.0.0", () => {
-      console.log(`Server is running on port ${PORT}`);
+    .connect('mongodb+srv://adarsh14304:adarsh@cluster0.s8vo8qg.mongodb.net/?retryWrites=true&w=majority', {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    })
+    .then(() => {
+        console.log("MongoDB connected");
+        server.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error("MongoDB connection error:", err);
     });
-  })
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-  });
+
+const connectedUsers = {};
+
+io.on('connection', (socket) => {
+    console.log('A user connected');
+
+    socket.on('setUser', (userId) => {
+        connectedUsers[userId] = socket; 
+        console.log('User set:', userId);
+    });
+
+    socket.on('disconnect', () => {
+        for (let userId in connectedUsers) {
+            if (connectedUsers[userId] === socket) {
+                delete connectedUsers[userId];
+                console.log('User disconnected:', userId);
+                break;
+            }
+        }
+    });
+});
 
 const User = require("./models/user");
 const Message = require("./models/message");
-
-//Endpoint for user registration
-
 // Endpoint for user registration
 app.post("/register", (req, res) => {
     const { name, email, password, image } = req.body;
@@ -144,23 +166,32 @@ app.get("/users/:userId", (req, res) => {
   //endpoint to send a request to a user
   app.post("/friend-request", async (req, res) => {
     const { currentUserId, selectedUserId } = req.body;
-  
-    try {
-      //update the recepient's friendRequestsArray!
-      await User.findByIdAndUpdate(selectedUserId, {
-        $push: { freindRequests: currentUserId },
-      });
-  
-      //update the sender's sentFriendRequests array
-      await User.findByIdAndUpdate(currentUserId, {
-        $push: { sentFriendRequests: selectedUserId },
-      });
-  
-      res.sendStatus(200);
-    } catch (error) {
-      res.sendStatus(500);
+
+    if (!currentUserId || !selectedUserId) {
+        return res.status(400).json({ error: "Both currentUserId and selectedUserId are required" });
     }
-  });
+
+    try {
+        const updatedRecipient = await User.findByIdAndUpdate(selectedUserId, {
+            $push: { friendRequests: currentUserId },
+        });
+
+        const updatedSender = await User.findByIdAndUpdate(currentUserId, {
+            $push: { sentFriendRequests: selectedUserId },
+        });
+
+        const recipientSocket = connectedUsers[selectedUserId]; // Use connectedUsers object
+        if (recipientSocket) {
+            const newFriendRequest = updatedSender; // Assuming this format for newFriendRequest
+            recipientSocket.emit('newFriendRequest', newFriendRequest);
+        }
+
+        res.status(200).json({ message: "Friend request sent successfully" });
+    } catch (error) {
+        console.error("Error sending friend request:", error);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+});
   
   //endpoint to show all the friend-requests of a particular user
   app.get("/friend-request/:userId", async (req, res) => {
@@ -227,44 +258,55 @@ app.get("/users/:userId", (req, res) => {
     }
   });
   
-  const multer = require("multer");
-  
-  // Configure multer for handling file uploads
   const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-      cb(null, "files/"); // Specify the desired destination folder
+        cb(null, "files/");
     },
     filename: function (req, file, cb) {
-      // Generate a unique filename for the uploaded file
-      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-      cb(null, uniqueSuffix + "-" + file.originalname);
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, uniqueSuffix + "-" + file.originalname);
     },
-  });
-  
-  const upload = multer({ storage: storage });
+});
+const upload = multer({ storage: storage });
   
   //endpoint to post Messages and store it in the backend
-  app.post("/messages", upload.single("imageFile"), async (req, res) => {
+  app.post('/messages', upload.single('imageFile'), async (req, res) => {
     try {
-      const { senderId, recepientId, messageType, messageText } = req.body;
-  
-      const newMessage = new Message({
-        senderId,
-        recepientId,
-        messageType,
-        message: messageText,
-        timestamp: new Date(),
-        imageUrl: messageType === "image" ? req.file.path : null,
-      });
-  
-      await newMessage.save();
-      res.status(200).json({ message: "Message sent Successfully" });
+        const senderId = req.body.senderId; 
+        const recepientId = req.body.recepientId;
+        const messageType = req.body.messageType;
+        const messageText = req.body.messageText;
+
+        const newMessage = new Message({
+            senderId,
+            recepientId,
+            messageType,
+            message: messageText,
+            timestamp: new Date(),
+            imageUrl: messageType === 'image' ? req.file.path : null,
+        });
+
+        await newMessage.save();
+        // Populate sender details for the message
+        await newMessage.populate('senderId', '_id name');
+
+        // Emit new message event to both sender and recipient
+        const senderSocket = connectedUsers[senderId];
+        if (senderSocket) {
+            senderSocket.emit('newMessage', newMessage);
+        }
+
+        const recipientSocket = connectedUsers[recepientId];
+        if (recipientSocket) {
+            recipientSocket.emit('newMessage', newMessage);
+        }
+
+        res.status(200).json({ message: "Message sent successfully" });
     } catch (error) {
-      console.log(error);
-      res.status(500).json({ error: "Internal Server Error" });
+        console.error('Error sending message:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
-  });
-  
+});
   ///endpoint to get the userDetails to design the chat Room header
   app.get("/user/:userId", async (req, res) => {
     try {
