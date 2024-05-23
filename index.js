@@ -26,8 +26,6 @@ const jwt = require('jsonwebtoken');
 
 mongoose
     .connect('mongodb+srv://adarsh14304:adarsh@cluster0.s8vo8qg.mongodb.net/?retryWrites=true&w=majority', {
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
     })
     .then(() => {
         console.log("MongoDB connected");
