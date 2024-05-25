@@ -17,12 +17,12 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: false,
   },
-  freindRequests: [
-    {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-  ],
+  friendRequests: [ 
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+        },
+    ],
   friends: [
     {
       type: mongoose.Schema.Types.ObjectId,
