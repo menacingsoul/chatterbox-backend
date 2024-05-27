@@ -5,7 +5,6 @@ const http = require("http");
 const socketIo = require("socket.io");
 const passport = require("passport");
 const LocalStrategy = require("passport-local");
-const Redis = require("ioredis");
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const path = require("path"); // Add this line to work with file paths
@@ -26,6 +25,9 @@ app.use("/files", express.static(path.join(__dirname, "files"))); // Serve uploa
 
 const jwt = require("jsonwebtoken");
 dotenv.config();
+
+
+
 
 mongoose
   .connect(process.env.MONGO_URI, {})
@@ -91,6 +93,10 @@ const otpTransporter = nodemailer.createTransport({
 const User = require("./models/user");
 const Message = require("./models/message");
 const OTPVerification = require("./models/otp");
+
+app.get("/", (req, res) => res.send("Express on Vercel"));
+
+
 
 app.post("/send-otp", async (req, res) => {
 
@@ -682,6 +688,57 @@ app.get("/friend-request/:userId", async (req, res) => {
   }
 });
 
+// Endpoint to get the user's friends with populated details
+app.get('/user-friends/:userId', async (req, res) => {
+  try {
+      const { userId } = req.params;
+
+      const user = await User.findById(userId).populate('friends', 'name email image'); 
+
+      if (!user) {
+          return res.status(404).json({ error: "User not found" });
+      }
+
+      res.status(200).json(user.friends); 
+  } catch (error) {
+      console.error("Error fetching user friends:", error);
+      res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// Endpoint to remove a friend
+app.post('/remove-friend', async (req, res) => {
+    const { userId, friendId } = req.body;
+
+    // Input validation: Check if required fields are present
+    if (!userId || !friendId) {
+        return res.status(400).json({ error: 'Both userId and friendId are required' });
+    }
+
+    try {
+        // Update both users' friend lists
+        await User.findByIdAndUpdate(userId, { $pull: { friends: friendId } });
+        await User.findByIdAndUpdate(friendId, { $pull: { friends: userId } });
+
+        // Emit events to notify both users about the friend removal
+        const userSocket = connectedUsers[userId];
+        const friendSocket = connectedUsers[friendId];
+
+        if (userSocket) {
+            userSocket.emit('friendRemoved', friendId); // Send friendId to remove from the user's list
+        }
+        if (friendSocket) {
+            friendSocket.emit('friendRemoved', userId); // Send userId to remove from the friend's list
+        }
+
+        res.status(200).json({ message: 'Friend removed successfully' });
+    } catch (error) {
+        console.error('Error removing friend:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+
+
 // Endpoint to accept a friend request
 app.post('/friend-request/accept', async (req, res) => {
   const { senderId, recipientId } = req.body;
@@ -917,5 +974,20 @@ app.get("/friends/:userId", (req, res) => {
   } catch (error) {
     console.log("error", error);
     res.status(500).json({ message: "internal server error" });
+  }
+});
+
+//endpoint to update user details
+app.put('/update-profile/:userId', async (req, res) => {
+  const { name,image } = req.body;
+  const userId = req.params.userId;
+
+  try {
+      const updatedUser = await User.findByIdAndUpdate(userId, { name,image }, { new: true }); // { new: true } returns the updated document
+
+      res.status(200).json(updatedUser);
+  } catch (error) {
+      console.error('Error updating profile:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
   }
 });
