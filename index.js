@@ -93,6 +93,8 @@ const Message = require("./models/message");
 const OTPVerification = require("./models/otp");
 
 app.post("/send-otp", async (req, res) => {
+
+  
   const { email } = req.body;
 
   if (!email) {
@@ -100,32 +102,25 @@ app.post("/send-otp", async (req, res) => {
   }
 
   try {
-    // Check if the email already exists in the User collection
+    // 1. Check if email is already registered
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: "Email is already registered." });
     }
 
-    let otpVerificationRecord = await OTPVerification.findOne({
-      email,
-      expiresAt: { $gt: new Date() }, // Check if not expired
-    });
+    // 2. Find or create an OTP verification record
+    let otpVerificationRecord = await OTPVerification.findOneAndUpdate(
+      { email },
+      {
+        otp: otpGenerator.generate(6, {
+          upperCaseAlphabets: false,
+          specialChars: false,
+        }),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour expiry
+      },
+      { new: true, upsert: true } // Create if not found
+    );
 
-    // Generate a new OTP only if the record doesn't exist or is expired
-    if (!otpVerificationRecord) {
-      const otp = otpGenerator.generate(6, {
-        upperCaseAlphabets: false,
-        specialChars: false,
-      });
-      const otpExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
-
-      otpVerificationRecord = new OTPVerification({
-        email,
-        otp,
-        expiresAt: otpExpiry,
-      });
-      await otpVerificationRecord.save();
-    }
 
     // Send OTP email
     const mailOptions = {
