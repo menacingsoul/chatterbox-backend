@@ -5,7 +5,6 @@ const http = require("http");
 const socketIo = require("socket.io");
 const passport = require("passport");
 const LocalStrategy = require("passport-local");
-const Redis = require("ioredis");
 const bcrypt = require("bcryptjs");
 const multer = require("multer");
 const path = require("path"); // Add this line to work with file paths
@@ -26,6 +25,9 @@ app.use("/files", express.static(path.join(__dirname, "files"))); // Serve uploa
 
 const jwt = require("jsonwebtoken");
 dotenv.config();
+
+
+
 
 mongoose
   .connect(process.env.MONGO_URI, {})
@@ -91,6 +93,10 @@ const otpTransporter = nodemailer.createTransport({
 const User = require("./models/user");
 const Message = require("./models/message");
 const OTPVerification = require("./models/otp");
+
+app.get("/", (req, res) => res.send("Express on Vercel"));
+
+
 
 app.post("/send-otp", async (req, res) => {
   const { email } = req.body;
