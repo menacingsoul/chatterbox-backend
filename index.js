@@ -17,6 +17,8 @@ const otpGenerator = require("otp-generator");
 const server = http.createServer(app);
 const io = socketIo(server);
 const dotenv = require("dotenv");
+const cloudinary = require('cloudinary');
+
 
 app.use(cors());
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -60,6 +62,13 @@ io.on("connection", (socket) => {
   });
 });
 
+// Cloudinary configuration
+cloudinary.v2.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+});
 //transporter for mail
 
 const transporter = nodemailer.createTransport({
@@ -861,7 +870,7 @@ app.post("/messages", upload.single("imageFile"), async (req, res) => {
       messageType,
       message: messageText,
       timestamp: new Date(),
-      imageUrl: messageType === "image" ? req.file.path : null,
+      imageUrl: messageType === "image" ? req.body.imageUrl : null,
     });
 
     await newMessage.save();
